@@ -4,20 +4,6 @@ import { z } from 'zod'
 const BTB_FEATURE_ID = 'btb-scan'
 
 export async function scanRoutes(fastify: FastifyInstance) {
-  // GET /app-info — iOS fetches this to build the Wind Connect URL
-  // Returns the app's Wind UUID resolved from the sk_live_ key (never exposed to client)
-  fastify.get('/app-info', async (_request, reply) => {
-    const { WIND_API_URL, BTB_APP_API_KEY } = process.env
-    const res = await fetch(`${WIND_API_URL}/v1/app/info`, {
-      headers: { Authorization: `Bearer ${BTB_APP_API_KEY}` },
-    })
-    if (!res.ok) {
-      return reply.status(503).send({ error: { code: 'APP_LOOKUP_FAILED', message: 'Could not resolve app ID' } })
-    }
-    const { id: appId, name: appName } = await res.json() as { id: string; name: string }
-    return reply.send({ appId, appName })
-  })
-
   // GET /balance?userId= — proxy balance check so sk_live_ key stays server-side
   fastify.get('/balance', async (request, reply) => {
     const { WIND_API_URL, BTB_APP_API_KEY } = process.env
