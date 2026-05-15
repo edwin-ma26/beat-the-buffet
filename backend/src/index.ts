@@ -1,6 +1,5 @@
 import { config } from 'dotenv'
-import path from 'path'
-config({ path: path.resolve(__dirname, '../.env') })
+config() // loads .env locally; no-op in production
 
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
@@ -16,7 +15,7 @@ async function start() {
   fastify.get('/health', async () => ({ status: 'ok' }))
   await fastify.register(scanRoutes)
 
-  await fastify.listen({ port: PORT, host: '::' })
+  await fastify.listen({ port: PORT, host: '0.0.0.0' })
 }
 
 start().catch(err => {
