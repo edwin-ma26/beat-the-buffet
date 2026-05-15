@@ -1,5 +1,5 @@
 [build]
-buildCommand = "npm install && npm run build"
+buildCommand = "npm install"
 
 [deploy]
-startCommand = "npm start"
+startCommand = "npx tsx src/index.ts"
