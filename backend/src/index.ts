@@ -8,7 +8,7 @@ import { scanRoutes } from './routes/scan'
 const PORT = Number(process.env.PORT ?? 4000)
 
 async function start() {
-  const fastify = Fastify({ logger: true })
+  const fastify = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 }) // 10MB
 
   await fastify.register(cors, { origin: true })
 
