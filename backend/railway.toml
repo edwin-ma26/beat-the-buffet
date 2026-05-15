@@ -1,5 +1,5 @@
 [build]
-buildCommand = "npm install"
+buildCommand = "npm install --include=dev && npx tsc"
 
 [deploy]
-startCommand = "npx tsx src/index.ts"
+startCommand = "node dist/index.js"
