@@ -4,6 +4,7 @@ config() // loads .env locally; no-op in production
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import { scanRoutes } from './routes/scan'
+import { placesRoutes } from './routes/places'
 
 const PORT = Number(process.env.PORT ?? 4000)
 
@@ -14,6 +15,7 @@ async function start() {
 
   fastify.get('/health', async () => ({ status: 'ok' }))
   await fastify.register(scanRoutes)
+  await fastify.register(placesRoutes)
 
   await fastify.listen({ port: PORT, host: '0.0.0.0' })
 }
