@@ -1,15 +1,30 @@
 import { FastifyInstance } from 'fastify'
+import sql from '../db'
 
 interface PlaceResult {
   name: string
   lat: number
   lng: number
   placeId: string
+  address?: string
+  rating?: number
+  reviewCount?: number
+  priceLevel?: number
+}
+
+// Simple buffet classifier: returns true if the place is likely a buffet/AYCE.
+function isLikelyBuffet(name: string, types: string[]): boolean {
+  const n = name.toLowerCase()
+  if (n.includes('buffet') || n.includes('all you can eat') ||
+      n.includes('ayce') || n.includes('smorgasbord')) return true
+  // Google Places sometimes tags buffet-style places with these types
+  if (types.includes('meal_delivery') && !types.includes('buffet')) return false
+  return true // came from keyword=buffet search so assume yes
 }
 
 export async function placesRoutes(fastify: FastifyInstance) {
   // GET /nearby-buffets?lat=X&lng=Y&radius=16000
-  // Returns up to 20 real buffet/AYCE restaurants from Google Places near the given coords.
+  // Returns up to 20 buffets from Google Places and upserts them into Postgres.
   fastify.get<{
     Querystring: { lat: string; lng: string; radius?: string }
   }>('/nearby-buffets', async (request, reply) => {
@@ -40,12 +55,44 @@ export async function placesRoutes(fastify: FastifyInstance) {
       return reply.status(502).send({ error: data.status })
     }
 
-    const results: PlaceResult[] = (data.results ?? []).map((p: any) => ({
-      name: p.name,
-      lat: p.geometry.location.lat,
-      lng: p.geometry.location.lng,
-      placeId: p.place_id,
-    }))
+    const places = (data.results ?? []) as any[]
+    const results: PlaceResult[] = places
+      .filter(p => isLikelyBuffet(p.name, p.types ?? []))
+      .map(p => ({
+        name: p.name,
+        lat: p.geometry.location.lat,
+        lng: p.geometry.location.lng,
+        placeId: p.place_id,
+        address: p.vicinity,
+        rating: p.rating,
+        reviewCount: p.user_ratings_total,
+        priceLevel: p.price_level,
+      }))
+
+    // Upsert into Postgres (fire-and-forget — don't block the response)
+    if (results.length > 0) {
+      sql`
+        INSERT INTO buffets (place_id, name, address, latitude, longitude, rating, review_count, price_level, last_updated)
+        SELECT * FROM UNNEST(
+          ${sql.array(results.map(r => r.placeId))}::text[],
+          ${sql.array(results.map(r => r.name))}::text[],
+          ${sql.array(results.map(r => r.address ?? null))}::text[],
+          ${sql.array(results.map(r => r.lat))}::float8[],
+          ${sql.array(results.map(r => r.lng))}::float8[],
+          ${sql.array(results.map(r => r.rating ?? null))}::real[],
+          ${sql.array(results.map(r => r.reviewCount ?? null))}::int[],
+          ${sql.array(results.map(r => r.priceLevel ?? null))}::int[],
+          ${sql.array(results.map(() => new Date().toISOString()))}::timestamptz[]
+        ) AS t(place_id, name, address, latitude, longitude, rating, review_count, price_level, last_updated)
+        ON CONFLICT (place_id) DO UPDATE SET
+          name         = EXCLUDED.name,
+          address      = EXCLUDED.address,
+          rating       = EXCLUDED.rating,
+          review_count = EXCLUDED.review_count,
+          price_level  = EXCLUDED.price_level,
+          last_updated = EXCLUDED.last_updated
+      `.catch(err => fastify.log.error(err, 'Postgres upsert failed'))
+    }
 
     return reply.send({ results })
   })
