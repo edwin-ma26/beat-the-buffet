@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import sql from '../db'
+import { classifyByNameAndTypes } from '../classifier'
 
 interface PlaceResult {
   name: string
@@ -10,16 +11,6 @@ interface PlaceResult {
   rating?: number
   reviewCount?: number
   priceLevel?: number
-}
-
-// Simple buffet classifier: returns true if the place is likely a buffet/AYCE.
-function isLikelyBuffet(name: string, types: string[]): boolean {
-  const n = name.toLowerCase()
-  if (n.includes('buffet') || n.includes('all you can eat') ||
-      n.includes('ayce') || n.includes('smorgasbord')) return true
-  // Google Places sometimes tags buffet-style places with these types
-  if (types.includes('meal_delivery') && !types.includes('buffet')) return false
-  return true // came from keyword=buffet search so assume yes
 }
 
 export async function placesRoutes(fastify: FastifyInstance) {
@@ -57,7 +48,7 @@ export async function placesRoutes(fastify: FastifyInstance) {
 
     const places = (data.results ?? []) as any[]
     const results: PlaceResult[] = places
-      .filter(p => isLikelyBuffet(p.name, p.types ?? []))
+      .filter(p => classifyByNameAndTypes(p.name, p.types ?? []) !== 'reject')
       .map(p => ({
         name: p.name,
         lat: p.geometry.location.lat,
