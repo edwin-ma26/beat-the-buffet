@@ -13,6 +13,7 @@
     "dotenv": "^16.4.1",
     "fastify": "^4.26.2",
     "postgres": "^3.4.9",
+    "wind-ai": "^0.0.1",
     "zod": "^3.22.4"
   },
   "devDependencies": {
