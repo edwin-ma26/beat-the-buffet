@@ -85,6 +85,63 @@ const CITIES = [
   // Pacific / Other
   { name: 'Honolulu', lat: 21.3069, lng: -157.8583 },
   { name: 'Anchorage', lat: 61.2181, lng: -149.9003 },
+  // Northeast — Asian buffet corridors
+  { name: 'NYC - Flushing', lat: 40.7676, lng: -73.8330 },
+  { name: 'NYC - Sunset Park', lat: 40.6501, lng: -74.0038 },
+  { name: 'NJ - Edison', lat: 40.5187, lng: -74.4121 },
+  { name: 'NJ - Jersey City', lat: 40.7178, lng: -74.0431 },
+  { name: 'NJ - Parsippany', lat: 40.8576, lng: -74.4265 },
+  { name: 'MD - Rockville', lat: 39.0840, lng: -77.1528 },
+  { name: 'VA - Annandale', lat: 38.8307, lng: -77.1961 },
+  { name: 'MA - Quincy', lat: 42.2529, lng: -71.0023 },
+  // Midwest — buffet-dense suburbs
+  { name: 'IL - Skokie', lat: 42.0334, lng: -87.7334 },
+  { name: 'MI - Troy', lat: 42.6064, lng: -83.1498 },
+  { name: 'MI - Sterling Heights', lat: 42.5803, lng: -83.0302 },
+  { name: 'OH - Dublin', lat: 40.0992, lng: -83.1141 },
+  { name: 'MN - Brooklyn Park', lat: 45.0941, lng: -93.3732 },
+  // South / Texas
+  { name: 'TX - Sugar Land', lat: 29.6197, lng: -95.6349 },
+  { name: 'TX - Plano', lat: 33.0198, lng: -96.6989 },
+  { name: 'TX - Richardson', lat: 32.9483, lng: -96.7299 },
+  { name: 'GA - Duluth', lat: 34.0032, lng: -84.1449 },
+  { name: 'GA - Norcross', lat: 33.9412, lng: -84.2135 },
+  // West — dense AYCE corridors
+  { name: 'CA - Irvine', lat: 33.6846, lng: -117.8265 },
+  { name: 'CA - Rowland Heights', lat: 33.9759, lng: -117.9054 },
+  { name: 'CA - Walnut', lat: 34.0220, lng: -117.8659 },
+  { name: 'CA - Sunnyvale', lat: 37.3688, lng: -122.0363 },
+  { name: 'CA - Milpitas', lat: 37.4323, lng: -121.8996 },
+  { name: 'CA - Fremont', lat: 37.5485, lng: -121.9886 },
+  { name: 'CA - Cupertino', lat: 37.3230, lng: -122.0322 },
+  { name: 'CA - Alhambra', lat: 34.0953, lng: -118.1270 },
+  { name: 'WA - Bellevue', lat: 47.6101, lng: -122.2015 },
+  { name: 'WA - Federal Way', lat: 47.3223, lng: -122.3126 },
+  // Mid-size cities often overlooked
+  { name: 'Fresno', lat: 36.7378, lng: -119.7871 },
+  { name: 'Bakersfield', lat: 35.3733, lng: -119.0187 },
+  { name: 'Stockton', lat: 37.9577, lng: -121.2908 },
+  { name: 'Spokane', lat: 47.6587, lng: -117.4260 },
+  { name: 'Boise', lat: 43.6150, lng: -116.2023 },
+  { name: 'Tulsa', lat: 36.1540, lng: -95.9928 },
+  { name: 'Wichita', lat: 37.6872, lng: -97.3301 },
+  { name: 'Little Rock', lat: 34.7465, lng: -92.2896 },
+  { name: 'Baton Rouge', lat: 30.4515, lng: -91.1871 },
+  { name: 'Birmingham', lat: 33.5186, lng: -86.8104 },
+  { name: 'Columbia SC', lat: 34.0007, lng: -81.0348 },
+  { name: 'Greensboro', lat: 36.0726, lng: -79.7920 },
+  { name: 'Knoxville', lat: 35.9606, lng: -83.9207 },
+  { name: 'Des Moines', lat: 41.5868, lng: -93.6250 },
+  { name: 'Madison', lat: 43.0731, lng: -89.4012 },
+  { name: 'Grand Rapids', lat: 42.9634, lng: -85.6681 },
+  { name: 'Akron', lat: 41.0814, lng: -81.5190 },
+  { name: 'Toledo', lat: 41.6639, lng: -83.5552 },
+  { name: 'Allentown', lat: 40.6023, lng: -75.4714 },
+  { name: 'Hartford', lat: 41.7637, lng: -72.6851 },
+  { name: 'Providence', lat: 41.8240, lng: -71.4128 },
+  { name: 'Buffalo', lat: 42.8864, lng: -78.8784 },
+  { name: 'Rochester NY', lat: 43.1566, lng: -77.6088 },
+  { name: 'Albany', lat: 42.6526, lng: -73.7562 },
 ]
 
 const RADIUS = 25000 // 25km per search center
@@ -116,11 +173,13 @@ async function fetchAllPages(initialUrl: string): Promise<any[]> {
   let { results, nextToken } = await fetchPlacesPage(initialUrl)
   all.push(...results)
 
-  if (nextToken) {
+  // Google allows up to 3 pages (60 results total) via next_page_token
+  while (nextToken) {
     await sleep(2000) // Google requires ~2s before next_page_token is valid
-    const page2Url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?pagetoken=${nextToken}&key=${API_KEY}`
-    const page2 = await fetchPlacesPage(page2Url)
-    all.push(...page2.results)
+    const pageUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?pagetoken=${nextToken}&key=${API_KEY}`
+    const page = await fetchPlacesPage(pageUrl)
+    all.push(...page.results)
+    nextToken = page.nextToken
   }
 
   return all
@@ -165,24 +224,34 @@ async function upsertBuffets(places: any[]) {
   totalInserted += places.length
 }
 
+// Keyword variations that catch buffets not named "buffet"
+const NEARBY_KEYWORDS = ['buffet', 'all you can eat', 'chinese buffet', 'indian buffet', 'korean bbq']
+const TEXT_QUERIES    = ['all you can eat restaurant', 'AYCE buffet', 'hot pot buffet', 'unlimited food restaurant']
+
 async function seedCity(city: { name: string; lat: number; lng: number }) {
   console.log(`\n📍 ${city.name}`)
 
-  // Two searches: keyword=buffet and textsearch for AYCE
-  const nearbyUrl =
-    `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
-    `?location=${city.lat},${city.lng}&radius=${RADIUS}` +
-    `&keyword=buffet&type=restaurant&key=${API_KEY}`
+  const loc = `${city.lat},${city.lng}`
 
-  const textUrl =
-    `https://maps.googleapis.com/maps/api/place/textsearch/json` +
-    `?query=all+you+can+eat+restaurant` +
-    `&location=${city.lat},${city.lng}&radius=${RADIUS}&key=${API_KEY}`
+  // Nearby searches for each keyword (all 3 pages each)
+  const nearbyPromises = NEARBY_KEYWORDS.map(kw =>
+    fetchAllPages(
+      `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
+      `?location=${loc}&radius=${RADIUS}&keyword=${encodeURIComponent(kw)}&type=restaurant&key=${API_KEY}`
+    )
+  )
 
-  const [nearbyResults, textResults] = await Promise.all([
-    fetchAllPages(nearbyUrl),
-    fetchPlacesPage(textUrl).then(r => r.results),
-  ])
+  // Text searches (all 3 pages each)
+  const textPromises = TEXT_QUERIES.map(q =>
+    fetchAllPages(
+      `https://maps.googleapis.com/maps/api/place/textsearch/json` +
+      `?query=${encodeURIComponent(q)}&location=${loc}&radius=${RADIUS}&key=${API_KEY}`
+    )
+  )
+
+  const allResults = await Promise.all([...nearbyPromises, ...textPromises])
+  const nearbyResults = allResults.flat()
+  const textResults: any[] = []
 
   // Merge and deduplicate by place_id
   const merged = new Map<string, any>()

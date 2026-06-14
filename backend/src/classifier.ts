@@ -12,9 +12,16 @@ const REJECT_NAME_KEYWORDS = [
 
 const REJECT_TYPES = ['grocery_or_supermarket', 'convenience_store', 'bakery']
 
-const REVIEW_PASS_KEYWORDS = [
-  'buffet', 'all you can eat', 'unlimited', 'ayce',
-  'endless', 'refill', 'as much as you want',
+// Stronger multi-word phrases that clearly indicate AYCE — single hits pass
+const REVIEW_STRONG_KEYWORDS = [
+  'all you can eat', 'ayce', 'all-you-can-eat',
+  'unlimited food', 'unlimited eat', 'eat as much',
+  'as much as you want', 'unlimited buffet',
+]
+
+// Weaker single words that require 2+ hits to pass
+const REVIEW_WEAK_KEYWORDS = [
+  'buffet', 'unlimited', 'endless',
 ]
 
 export type ClassifyResult = 'pass' | 'reject' | 'uncertain'
@@ -39,5 +46,8 @@ export function classifyByReviews(
     ...reviews.map(r => r.text),
   ].join(' ').toLowerCase()
 
-  return REVIEW_PASS_KEYWORDS.some(kw => corpus.includes(kw))
+  if (REVIEW_STRONG_KEYWORDS.some(kw => corpus.includes(kw))) return true
+
+  const weakHits = REVIEW_WEAK_KEYWORDS.filter(kw => corpus.includes(kw)).length
+  return weakHits >= 2
 }
