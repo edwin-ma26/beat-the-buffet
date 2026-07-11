@@ -4,3 +4,7 @@ node_modules
 *.xcuserstate
 DerivedData/
 xcuserdata/
+
+# Never commit service-account credentials
+*firebase-adminsdk*.json
+backend/dist/

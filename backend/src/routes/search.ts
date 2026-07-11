@@ -25,7 +25,8 @@ export async function searchRoutes(fastify: FastifyInstance) {
       results = await sql`
         SELECT
           id, place_id, name, address, latitude, longitude,
-          rating, review_count, price_level,
+          rating, review_count, price_level, verified,
+          visit_count, total_calories, total_cost, rating_sum, rating_count,
           ST_Distance(location, ST_MakePoint(${lngN}, ${latN})::geography) AS distance_m
         FROM buffets
         WHERE ST_DWithin(
@@ -41,7 +42,8 @@ export async function searchRoutes(fastify: FastifyInstance) {
       results = await sql`
         SELECT
           id, place_id, name, address, latitude, longitude,
-          rating, review_count, price_level,
+          rating, review_count, price_level, verified,
+          visit_count, total_calories, total_cost, rating_sum, rating_count,
           ST_Distance(location, ST_MakePoint(${lngN}, ${latN})::geography) AS distance_m,
           similarity(name, ${query}) AS sim
         FROM buffets

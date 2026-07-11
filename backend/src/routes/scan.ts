@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { createClient } from 'wind-ai'
+import { requireAuth } from '../auth'
 
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
 const WIND_APP_ID = '5b61f8d1-6222-4cc2-8c50-8896669e8594'
@@ -9,7 +10,10 @@ const WIND_MODEL = 'google/gemini-2.5-flash'
 const WIND_BASE_URL = 'https://wind-production-3225.up.railway.app'
 
 export async function scanRoutes(fastify: FastifyInstance) {
-  fastify.post('/scan', async (request, reply) => {
+  fastify.post('/scan', {
+    preHandler: requireAuth,
+    config: { rateLimit: { max: 15, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const body = z.object({
       imageBase64: z.string().min(1),
       prompt:      z.string().min(1),
@@ -34,10 +38,11 @@ export async function scanRoutes(fastify: FastifyInstance) {
         model:     WIND_MODEL,
         messages: [{
           role: 'user',
+          // wind-ai's types say string, but the API accepts multimodal arrays
           content: [
             { type: 'text', text: prompt },
             { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } },
-          ],
+          ] as any,
         }],
       }) as any
 
@@ -72,7 +77,9 @@ export async function scanRoutes(fastify: FastifyInstance) {
   })
 
   // GET /wind/balance?windUserId=xxx — proxy balance check without exposing API key
-  fastify.get<{ Querystring: { windUserId: string } }>('/wind/balance', async (request, reply) => {
+  fastify.get<{ Querystring: { windUserId: string } }>('/wind/balance', {
+    preHandler: requireAuth,
+  }, async (request, reply) => {
     const { windUserId } = request.query
     if (!windUserId) return reply.status(400).send({ error: 'windUserId required' })
 

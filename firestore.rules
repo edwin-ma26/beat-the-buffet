@@ -3,42 +3,142 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isAuthed() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
     match /users/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      // Caps self-granted referral bonuses (legit values are 1 or 5)
+      function bonusOK() {
+        return !('referralBonusSessions' in request.resource.data)
+          || (request.resource.data.referralBonusSessions is int
+              && request.resource.data.referralBonusSessions <= 5);
+      }
+      // Another user crediting this user for a referral: exactly +1 to
+      // referralCount and a capped bonus, nothing else touched.
+      function referralCreditOnly() {
+        return request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['referralCount', 'referralBonusSessions'])
+          && request.resource.data.referralCount == resource.data.get('referralCount', 0) + 1
+          && request.resource.data.referralBonusSessions is int
+          && request.resource.data.referralBonusSessions <= 5;
+      }
+
+      allow read: if isAuthed();
+      allow create: if isOwner(uid) && bonusOK();
+      allow update: if (isOwner(uid) && bonusOK())
+        || (isAuthed() && referralCreditOnly());
+      allow delete: if isOwner(uid);
 
       match /sessions/{sessionId} {
-        // Owner can read/write; friends can read (for the Feed)
-        allow read: if request.auth != null && (
-          request.auth.uid == uid ||
-          exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid))
-        );
-        allow write: if request.auth != null && request.auth.uid == uid;
+        // A friend adding/removing only their own uid in likedBy
+        function onlyOwnLikeChange() {
+          return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy'])
+            && request.resource.data.get('likedBy', []).toSet()
+                .difference(resource.data.get('likedBy', []).toSet())
+                .union(resource.data.get('likedBy', []).toSet()
+                  .difference(request.resource.data.get('likedBy', []).toSet()))
+                .hasOnly([request.auth.uid]);
+        }
+        function isFriendOfOwner() {
+          return exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid));
+        }
+
+        // Owner can read/write; friends can read (for the Feed) and like
+        allow read: if isAuthed() && (request.auth.uid == uid || isFriendOfOwner());
+        allow create, delete: if isOwner(uid);
+        allow update: if isOwner(uid)
+          || (isAuthed() && isFriendOfOwner() && onlyOwnLikeChange());
       }
 
       match /friends/{friendId} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        // Owner manages their list; the other party may add/remove
+        // themselves (friend-request accept, unfriend cleanup).
+        allow read: if isOwner(uid);
+        allow write: if isOwner(uid) || isOwner(friendId);
       }
     }
 
     match /appleUsage/{appleId} {
-      allow read, write: if request.auth != null;
+      // Doc ID is an Apple user ID (not the Firebase uid), so ownership
+      // can't be verified here. Counter is strictly increasing so nobody
+      // can reset their free-session usage.
+      allow read: if isAuthed();
+      allow create: if isAuthed()
+        && request.resource.data.keys().hasOnly(['completedSessions'])
+        && request.resource.data.completedSessions is int
+        && request.resource.data.completedSessions > 0;
+      allow update: if isAuthed()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedSessions'])
+        && request.resource.data.completedSessions is int
+        && request.resource.data.completedSessions > resource.data.get('completedSessions', 0);
+      allow delete: if false;
     }
 
     match /buffets/{buffetId} {
+      // Community aggregates: anyone signed in may contribute, but the
+      // counters can only grow — no zeroing out another buffet's stats.
+      function countersMonotonic() {
+        return request.resource.data.get('visitCount', 0)    >= resource.data.get('visitCount', 0)
+          &&  request.resource.data.get('totalCalories', 0)  >= resource.data.get('totalCalories', 0)
+          &&  request.resource.data.get('totalCost', 0)      >= resource.data.get('totalCost', 0)
+          &&  request.resource.data.get('ratingSum', 0)      >= resource.data.get('ratingSum', 0)
+          &&  request.resource.data.get('ratingCount', 0)    >= resource.data.get('ratingCount', 0);
+      }
+
       allow read: if true;
-      allow write: if request.auth != null;
+      allow create: if isAuthed();
+      allow update: if isAuthed() && countersMonotonic();
+      allow delete: if false;
+
+      match /leaderboard/{entry} {
+        // Doc ID is the Firebase uid — users only write their own entry
+        allow read: if true;
+        allow write: if isOwner(entry);
+      }
+      match /reviews/{review} {
+        allow read: if true;
+        allow create: if isAuthed() && request.resource.data.authorUID == request.auth.uid;
+        allow delete: if isAuthed() && resource.data.authorUID == request.auth.uid;
+        allow update: if false;
+      }
     }
 
     match /friendRequests/{reqId} {
-      allow read, write: if request.auth != null;
+      allow read: if isAuthed()
+        && (resource.data.fromUID == request.auth.uid || resource.data.toUID == request.auth.uid);
+      allow create: if isAuthed()
+        && request.resource.data.fromUID == request.auth.uid
+        && request.resource.data.status == 'pending';
+      // Recipient accepts/declines — may only change status
+      allow update: if isAuthed()
+        && resource.data.toUID == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      // Either party may delete (account-deletion cleanup)
+      allow delete: if isAuthed()
+        && (resource.data.fromUID == request.auth.uid || resource.data.toUID == request.auth.uid);
     }
 
     match /group-sessions/{code} {
-      allow read, write: if request.auth != null;
+      allow read: if isAuthed();
+      allow create: if isAuthed() && request.resource.data.hostUID == request.auth.uid;
+      // Only the host can end/modify the session
+      allow update: if isAuthed() && resource.data.hostUID == request.auth.uid;
+      allow delete: if false;
+
       match /participants/{uid} {
-        allow read, write: if request.auth != null;
+        allow read: if isAuthed();
+        allow write: if isOwner(uid);
       }
+    }
+
+    match /referralCodes/{code} {
+      allow read: if isAuthed();
+      allow create: if isAuthed() && request.resource.data.ownerUID == request.auth.uid;
+      allow update, delete: if false;
     }
   }
 }
