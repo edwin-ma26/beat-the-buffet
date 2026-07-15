@@ -7,6 +7,7 @@ import rateLimit from '@fastify/rate-limit'
 import { scanRoutes } from './routes/scan'
 import { placesRoutes } from './routes/places'
 import { searchRoutes } from './routes/search'
+import { notifyRoutes } from './routes/notify'
 
 const PORT = Number(process.env.PORT ?? 4000)
 
@@ -25,6 +26,7 @@ async function start() {
   await fastify.register(scanRoutes)
   await fastify.register(placesRoutes)
   await fastify.register(searchRoutes)
+  await fastify.register(notifyRoutes)
 
   await fastify.listen({ port: PORT, host: '0.0.0.0' })
 }
