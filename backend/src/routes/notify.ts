@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { getFirestore } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
 import { requireAuth } from '../auth'
 
@@ -32,9 +32,6 @@ export async function notifyRoutes(fastify: FastifyInstance) {
       db.collection('users').doc(toUid).get(),
     ])
 
-    const fcmToken = toDoc.get('fcmToken') as string | undefined
-    if (!fcmToken) return reply.send({ sent: false, reason: 'no_token' })
-
     const fromName = (fromDoc.get('displayName') as string | undefined) || 'Someone'
     const cleanBuffet = buffetName?.replace(/[\r\n]/g, ' ').trim()
 
@@ -56,6 +53,20 @@ export async function notifyRoutes(fastify: FastifyInstance) {
           : `${fromName} liked your buffet session.`
         break
     }
+
+    // Persist to the recipient's in-app inbox regardless of push delivery
+    await db.collection('users').doc(toUid).collection('notifications').add({
+      type,
+      title,
+      body: bodyText,
+      fromUid,
+      fromName,
+      read: false,
+      createdAt: FieldValue.serverTimestamp(),
+    }).catch(err => request.log.error({ err }, 'inbox write failed'))
+
+    const fcmToken = toDoc.get('fcmToken') as string | undefined
+    if (!fcmToken) return reply.send({ sent: false, reason: 'no_token' })
 
     try {
       await getMessaging().send({

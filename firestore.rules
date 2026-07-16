@@ -11,11 +11,11 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      // Caps self-granted referral bonuses (legit values are 1 or 5)
+      // Caps self-granted referral bonuses (legit values are 1 or 3)
       function bonusOK() {
         return !('referralBonusSessions' in request.resource.data)
           || (request.resource.data.referralBonusSessions is int
-              && request.resource.data.referralBonusSessions <= 5);
+              && request.resource.data.referralBonusSessions <= 3);
       }
       // Another user crediting this user for a referral: exactly +1 to
       // referralCount and a capped bonus, nothing else touched.
@@ -59,6 +59,15 @@ service cloud.firestore {
         // themselves (friend-request accept, unfriend cleanup).
         allow read: if isOwner(uid);
         allow write: if isOwner(uid) || isOwner(friendId);
+      }
+
+      match /notifications/{notificationId} {
+        // Inbox is written by the backend (admin SDK bypasses rules);
+        // the owner reads it and may only flip the read flag.
+        allow read, delete: if isOwner(uid);
+        allow update: if isOwner(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow create: if false;
       }
     }
 
