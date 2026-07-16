@@ -105,6 +105,34 @@ export async function placesRoutes(fastify: FastifyInstance) {
     return reply.send({ ok: true })
   })
 
+  // POST /buffets/:placeId/rating — rating-only update. The app asks for the
+  // rating on the recap screen after the visit was already recorded, so this
+  // must not touch the visit counters.
+  fastify.post<{ Params: { placeId: string } }>('/buffets/:placeId/rating', {
+    preHandler: requireAuth,
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const body = z.object({
+      rating: z.number().int().min(1).max(5),
+    }).safeParse(request.body)
+
+    if (!body.success) {
+      return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: body.error.message } })
+    }
+
+    const updated = await sql`
+      UPDATE buffets SET
+        rating_sum   = rating_sum + ${body.data.rating},
+        rating_count = rating_count + 1
+      WHERE place_id = ${request.params.placeId}
+      RETURNING place_id
+    `
+    if (updated.length === 0) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Unknown buffet.' } })
+    }
+    return reply.send({ ok: true })
+  })
+
   // POST /buffets — register a user-added buffet (custom typed name).
   // Dedupes against existing rows: a similarly named buffet within 200m is
   // treated as the same place, so typos don't spawn duplicates.
