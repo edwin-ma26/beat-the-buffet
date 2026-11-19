@@ -1,0 +1,36 @@
+{
+  "parameters": {
+    "free_session_limit": {
+      "defaultValue": { "value": "2" },
+      "description": "Number of free buffet scans before paywall",
+      "valueType": "NUMBER"
+    },
+    "discover_radius_km": {
+      "defaultValue": { "value": "30" },
+      "description": "Search radius for nearby buffets in km",
+      "valueType": "NUMBER"
+    },
+    "discover_result_limit": {
+      "defaultValue": { "value": "50" },
+      "description": "Max buffets shown in Discover tab",
+      "valueType": "NUMBER"
+    },
+    "show_feed_tab": {
+      "defaultValue": { "value": "true" },
+      "description": "Show or hide the Feed tab",
+      "valueType": "BOOLEAN"
+    },
+    "show_leaderboard_tab": {
+      "defaultValue": { "value": "true" },
+      "description": "Show or hide the Leaderboard tab",
+      "valueType": "BOOLEAN"
+    },
+    "announcement_banner": {
+      "defaultValue": { "value": "" },
+      "description": "Banner text shown in app. Empty = hidden.",
+      "valueType": "STRING"
+    }
+  },
+  "parameterGroups": {},
+  "version": {}
+}
